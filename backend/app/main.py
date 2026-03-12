@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.utils.logger import logger
+from app.api import auth, users, emails, jobs, cvs, scan, settings
 import os
 
 load_dotenv()
@@ -21,6 +22,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Routers ───────────────────────────────────────────
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(emails.router)
+app.include_router(jobs.router)
+app.include_router(cvs.router)
+app.include_router(scan.router)
+app.include_router(settings.router)
+
 # ── Events ────────────────────────────────────────────
 @app.on_event("startup")
 async def startup_event():
@@ -33,10 +43,9 @@ async def shutdown_event():
 # ── Health Check ──────────────────────────────────────
 @app.get("/", tags=["Health"])
 async def root():
-    logger.info("Root endpoint hit")
     return {
-        "status": "online",
-        "app": "Email Manager Agent",
+        "status":  "online",
+        "app":     "Email Manager Agent",
         "version": "1.0.0",
     }
 
