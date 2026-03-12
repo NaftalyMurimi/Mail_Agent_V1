@@ -1,0 +1,44 @@
+# API
+fastapi
+uvicorn[standard]
+
+# Database
+sqlalchemy
+supabase
+
+# Authentication
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# AI
+groq
+
+# Email / Gmail
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# PDF parsing
+pypdf
+
+# Background jobs
+celery
+redis
+
+# Notifications
+python-telegram-bot
+sendgrid
+
+# Utilities
+python-dotenv
+pydantic[email]
+httpx
+apscheduler
+
+# Testing
+pytest
+pytest-asyncio
+httpx
+
+loguru==0.7.2
