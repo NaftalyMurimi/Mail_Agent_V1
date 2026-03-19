@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
 from dotenv import load_dotenv
 from app.utils.logger import logger
 from app.api import auth, users, emails, jobs, cvs, scan, settings

@@ -1,8 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models.user import User
-from app.schemas.user import UserResponse, UserUpdateRequest
+from fastapi import APIRouter, Depends, HTTPException
+from app.database import get_supabase
 from app.utils.dependencies import get_current_user
 from app.utils.logger import logger
 from datetime import datetime
@@ -10,39 +7,42 @@ from datetime import datetime
 router = APIRouter(prefix="/users", tags=["Users"])
 
 # ── Get my profile ─────────────────────────────────────
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    logger.info(f"Profile fetched for {current_user.email}")
+@router.get("/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    logger.info(f"Profile fetched for {current_user['email']}")
+    # Remove sensitive fields
+    current_user.pop("hashed_password", None)
     return current_user
 
 # ── Update my profile ──────────────────────────────────
-@router.put("/me", response_model=UserResponse)
+@router.put("/me")
 async def update_me(
-    request: UserUpdateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    full_name:        str | None = None,
+    phone_number:     str | None = None,
+    telegram_chat_id: str | None = None,
+    current_user: dict = Depends(get_current_user),
 ):
-    if request.full_name is not None:
-        current_user.full_name = request.full_name
-    if request.phone_number is not None:
-        current_user.phone_number = request.phone_number
-    if request.telegram_chat_id is not None:
-        current_user.telegram_chat_id = request.telegram_chat_id
+    sb = get_supabase()
+    updates = {"updated_at": datetime.utcnow().isoformat()}
 
-    current_user.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(current_user)
+    if full_name        is not None: updates["full_name"]        = full_name
+    if phone_number     is not None: updates["phone_number"]     = phone_number
+    if telegram_chat_id is not None: updates["telegram_chat_id"] = telegram_chat_id
 
-    logger.info(f"Profile updated for {current_user.email}")
-    return current_user
+    result = sb.table("users").update(updates).eq("id", current_user["id"]).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update profile")
+
+    updated = result.data[0]
+    updated.pop("hashed_password", None)
+    logger.info(f"Profile updated for {current_user['email']}")
+    return updated
 
 # ── Delete my account ──────────────────────────────────
 @router.delete("/me", status_code=204)
-async def delete_me(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    db.delete(current_user)
-    db.commit()
-    logger.info(f"Account deleted for {current_user.email}")
+async def delete_me(current_user: dict = Depends(get_current_user)):
+    sb = get_supabase()
+    sb.table("users").delete().eq("id", current_user["id"]).execute()
+    logger.info(f"Account deleted for {current_user['email']}")
     return

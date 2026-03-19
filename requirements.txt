@@ -8,7 +8,8 @@ supabase
 
 # Authentication
 python-jose[cryptography]
-passlib[bcrypt]
+#passlib[bcrypt]
+bcrypt==4.0.1
 python-multipart
 
 # AI
@@ -42,3 +43,4 @@ pytest-asyncio
 httpx
 
 loguru==0.7.2
+psycopg2-binary

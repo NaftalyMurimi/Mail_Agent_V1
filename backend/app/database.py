@@ -1,29 +1,22 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from supabase import create_client, Client
 from dotenv import load_dotenv
+from sqlalchemy.ext.declarative import declarative_base
 import os
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+SUPABASE_URL     = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 Base = declarative_base()
 
-# ── Only create engine if DATABASE_URL is set ─────────
-engine = None
-SessionLocal = None
+# ── Supabase client ────────────────────────────────────
+supabase: Client = None
 
-if DATABASE_URL:
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# ── Dependency — use this in every route that needs DB ──
-def get_db():
-    if not SessionLocal:
-        raise RuntimeError("DATABASE_URL is not set. Please configure your .env file.")
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_supabase() -> Client:
+    if not supabase:
+        raise RuntimeError("Supabase is not configured. Check your .env file.")
+    return supabase

@@ -1,9 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models.user import User
-from app.models.cv import CV
-from app.schemas.cv import CVResponse, CVListResponse
+from app.database import get_supabase
 from app.utils.dependencies import get_current_user
 from app.utils.logger import logger
 from datetime import datetime
@@ -16,24 +12,22 @@ UPLOAD_DIR = "docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ── Upload CV ──────────────────────────────────────────
-@router.post("/upload", response_model=CVResponse, status_code=201)
+@router.post("/upload", status_code=201)
 async def upload_cv(
-    file:         UploadFile       = File(...),
-    current_user: User             = Depends(get_current_user),
-    db:           Session          = Depends(get_db)
+    file:         UploadFile = File(...),
+    current_user: dict       = Depends(get_current_user),
 ):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
-    # Save file locally (Supabase Storage added in Phase 2)
-    file_id   = uuid.uuid4()
+    file_id   = str(uuid.uuid4())
     save_path = os.path.join(UPLOAD_DIR, f"{file_id}_{file.filename}")
 
     with open(save_path, "wb") as f:
         content = await file.read()
         f.write(content)
 
-    # Extract text with pypdf
+    # Extract text
     parsed_text = ""
     try:
         from pypdf import PdfReader
@@ -43,51 +37,52 @@ async def upload_cv(
     except Exception as e:
         logger.error(f"PDF parsing failed: {e}")
 
-    new_cv = CV(
-        id          = file_id,
-        user_id     = current_user.id,
-        filename    = file.filename,
-        storage_url = save_path,
-        parsed_text = parsed_text,
-        uploaded_at = datetime.utcnow(),
-    )
+    sb     = get_supabase()
+    new_cv = {
+        "id":          file_id,
+        "user_id":     current_user["id"],
+        "filename":    file.filename,
+        "storage_url": save_path,
+        "parsed_text": parsed_text,
+        "is_active":   True,
+        "uploaded_at": datetime.utcnow().isoformat(),
+    }
 
-    db.add(new_cv)
-    db.commit()
-    db.refresh(new_cv)
+    result = sb.table("cvs").insert(new_cv).execute()
 
-    logger.info(f"CV uploaded: {file.filename} for {current_user.email}")
-    return new_cv
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to save CV")
+
+    logger.info(f"CV uploaded: {file.filename} for {current_user['email']}")
+    # Return without parsed_text (too large)
+    cv = result.data[0]
+    cv.pop("parsed_text", None)
+    return cv
 
 # ── List CVs ───────────────────────────────────────────
-@router.get("", response_model=CVListResponse)
-async def get_cvs(
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db)
-):
-    cvs   = db.query(CV).filter(CV.user_id == current_user.id).all()
-    return {"total": len(cvs), "cvs": cvs}
+@router.get("")
+async def get_cvs(current_user: dict = Depends(get_current_user)):
+    sb     = get_supabase()
+    result = sb.table("cvs").select("id, filename, storage_url, is_active, uploaded_at").eq("user_id", current_user["id"]).execute()
+    return {"total": len(result.data), "cvs": result.data}
 
 # ── Delete CV ──────────────────────────────────────────
 @router.delete("/{cv_id}", status_code=204)
 async def delete_cv(
     cv_id:        str,
-    current_user: User    = Depends(get_current_user),
-    db:           Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
 ):
-    cv = db.query(CV).filter(
-        CV.id      == cv_id,
-        CV.user_id == current_user.id
-    ).first()
+    sb     = get_supabase()
+    result = sb.table("cvs").select("id, storage_url").eq("id", cv_id).eq("user_id", current_user["id"]).execute()
 
-    if not cv:
+    if not result.data:
         raise HTTPException(status_code=404, detail="CV not found")
 
     # Remove file from disk
-    if cv.storage_url and os.path.exists(cv.storage_url):
-        os.remove(cv.storage_url)
+    storage_url = result.data[0].get("storage_url")
+    if storage_url and os.path.exists(storage_url):
+        os.remove(storage_url)
 
-    db.delete(cv)
-    db.commit()
+    sb.table("cvs").delete().eq("id", cv_id).execute()
     logger.info(f"CV {cv_id} deleted")
     return
