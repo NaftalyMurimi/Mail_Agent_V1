@@ -31,7 +31,8 @@ def run_scan(user_id: str, days_back: int = 7, max_results: int = 50) -> dict:
             logger.info("No CV found for user — scoring without CV")
 
         # ── Fetch emails from Gmail ────────────────────
-        emails = fetch_emails(days_back=days_back, max_results=max_results)
+        # emails = fetch_emails(days_back=days_back, max_results=max_results)
+        emails = fetch_emails(user_id=user_id, days_back=days_back, max_results=max_results)
         emails_found = len(emails)
 
         # ── Get already processed gmail IDs ───────────
