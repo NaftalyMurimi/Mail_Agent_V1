@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LayoutDashboard, Mail, Briefcase, FileText,
          Settings, LogOut, Zap } from 'lucide-react';
+import api from '../services/api';
 import { scanAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { useState } from 'react';
@@ -19,17 +20,47 @@ export default function Layout({ children }) {
   const navigate         = useNavigate();
   const [scanning, setScanning] = useState(false);
 
-  const handleScan = async () => {
-    setScanning(true);
-    try {
-      await scanAPI.trigger();
-      toast.success('Scan started! Check back in 30 seconds.');
-    } catch {
-      toast.error('Scan failed to start');
-    } finally {
+ const handleScan = async () => {
+  setScanning(true);
+  try {
+    const res = await scanAPI.trigger();
+    const taskId = res.data.task_id;
+    toast.success('Scan started! Checking progress...');
+
+    // Poll for task completion every 3 seconds
+    const interval = setInterval(async () => {
+      try {
+        const status = await api.get(`/scan/status/${taskId}`);
+        const { status: taskStatus, result } = status.data;
+
+        if (taskStatus === 'SUCCESS') {
+          clearInterval(interval);
+          setScanning(false);
+          toast.success(
+            `Scan complete! Found ${result?.emails_classified || 0} emails, ${result?.jobs_detected || 0} jobs.`
+          );
+        } else if (taskStatus === 'FAILURE') {
+          clearInterval(interval);
+          setScanning(false);
+          toast.error('Scan failed. Check your Gmail connection.');
+        }
+      } catch {
+        clearInterval(interval);
+        setScanning(false);
+      }
+    }, 3000);
+
+    // Stop polling after 3 minutes regardless
+    setTimeout(() => {
+      clearInterval(interval);
       setScanning(false);
-    }
-  };
+    }, 180000);
+
+  } catch (err) {
+    toast.error(err.response?.data?.detail || 'Scan failed to start');
+    setScanning(false);
+  }
+};
 
   const handleLogout = async () => {
     await logout();

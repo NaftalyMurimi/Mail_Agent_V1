@@ -1,28 +1,50 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from app.utils.dependencies import get_current_user
 from app.utils.logger import logger
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/scan", tags=["Scan"])
 
-def run_scan_task(user_id: str):
-    from app.agent.scanner import run_scan
-    run_scan(user_id)
-
 @router.post("")
-async def trigger_scan(
-    background_tasks: BackgroundTasks,
-    current_user: dict = Depends(get_current_user)
-):
+async def trigger_scan(current_user: dict = Depends(get_current_user)):
+    from app.tasks import scan_user_gmail
     user_id = current_user["id"]
-    logger.info(f"Manual scan triggered by {current_user['email']}")
 
-    # Run scan in background so API returns immediately
-    background_tasks.add_task(run_scan_task, user_id)
+    # Check Gmail is connected
+    from app.database import get_supabase
+    sb = get_supabase()
+    gmail = sb.table("gmail_tokens").select("id").eq(
+        "user_id", user_id
+    ).execute()
+
+    if not gmail.data:
+        raise HTTPException(
+            status_code=400,
+            detail="Gmail not connected. Go to Settings to connect your Gmail."
+        )
+
+    # Queue Celery task
+    task = scan_user_gmail.delay(user_id)
+    logger.info(f"Scan queued for {current_user['email']} — task {task.id}")
 
     return {
-        "message":      "Scan started successfully",
-        "status":       "running",
+        "message":      "Scan queued successfully",
+        "task_id":      task.id,
+        "status":       "queued",
         "triggered_at": datetime.now(timezone.utc).isoformat(),
-        "note":         "Fetch GET /emails and GET /jobs in 30 seconds to see results"
+    }
+
+# ── Check scan task status ─────────────────────────────
+@router.get("/status/{task_id}")
+async def get_scan_status(
+    task_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    from app.celery_app import celery
+    task = celery.AsyncResult(task_id)
+
+    return {
+        "task_id": task_id,
+        "status":  task.status,
+        "result":  task.result if task.ready() else None,
     }

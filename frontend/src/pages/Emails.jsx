@@ -3,6 +3,12 @@ import { emailAPI } from '../services/api';
 import { Trash2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+useEffect(() => {
+  load();
+  const interval = setInterval(load, 30000);
+  return () => clearInterval(interval);
+}, [filter]);
+
 const TYPE_COLORS = {
   job_advert:  { bg:'#1d4ed820', color:'#60a5fa', label:'Job Advert'  },
   interview:   { bg:'#d9770620', color:'#fbbf24', label:'Interview'   },
