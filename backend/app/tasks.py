@@ -2,6 +2,7 @@ from app.celery_app import celery
 from app.agent.scanner import run_scan
 from app.database import get_supabase
 from app.utils.logger import logger
+import asyncio
 
 # ── Single user scan task ──────────────────────────────
 @celery.task(
@@ -14,7 +15,13 @@ def scan_user_gmail(self, user_id: str):
     logger.info(f"Celery task started for user {user_id}")
     try:
         result = run_scan(user_id=user_id)
-        logger.info(f"Celery task completed for user {user_id}: {result}")
+        logger.info(f"Scan complete for {user_id}: {result}")
+
+        # Send Telegram notification
+        if result.get("status") == "success":
+            from app.utils.notifications import notify_scan_complete
+            asyncio.run(notify_scan_complete(user_id, result))
+
         return result
     except Exception as exc:
         logger.error(f"Celery task failed for user {user_id}: {exc}")
@@ -26,19 +33,15 @@ def scheduled_scan_all_users():
     logger.info("Running scheduled scan for all users")
     sb = get_supabase()
 
-    # Get all users who have Gmail connected
     result = sb.table("gmail_tokens").select("user_id").execute()
 
     if not result.data:
-        logger.info("No users with Gmail connected — skipping")
+        logger.info("No users with Gmail connected")
         return {"scanned": 0}
 
     count = 0
     for row in result.data:
-        user_id = row["user_id"]
-        scan_user_gmail.delay(user_id)
+        scan_user_gmail.delay(row["user_id"])
         count += 1
-        logger.info(f"Queued scan for user {user_id}")
 
-    logger.info(f"Scheduled scan queued for {count} users")
     return {"scanned": count}

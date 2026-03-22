@@ -3,12 +3,6 @@ import { emailAPI } from '../services/api';
 import { Trash2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-useEffect(() => {
-  load();
-  const interval = setInterval(load, 30000);
-  return () => clearInterval(interval);
-}, [filter]);
-
 const TYPE_COLORS = {
   job_advert:  { bg:'#1d4ed820', color:'#60a5fa', label:'Job Advert'  },
   interview:   { bg:'#d9770620', color:'#fbbf24', label:'Interview'   },
@@ -30,17 +24,25 @@ export default function Emails() {
       const params = filter !== 'all' ? { email_type: filter } : {};
       const res    = await emailAPI.getAll(params);
       setEmails(res.data.emails || []);
+    } catch {
+      toast.error('Failed to load emails');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => {
+    load();
+  }, [filter]);
 
   const handleDelete = async (id) => {
-    await emailAPI.delete(id);
-    setEmails(emails.filter(e => e.id !== id));
-    toast.success('Email removed');
+    try {
+      await emailAPI.delete(id);
+      setEmails(emails.filter(e => e.id !== id));
+      toast.success('Email removed');
+    } catch {
+      toast.error('Failed to delete email');
+    }
   };
 
   return (
@@ -59,8 +61,7 @@ export default function Emails() {
       {/* Filter Pills */}
       <div style={{ display:'flex', gap:'8px', marginBottom:'20px', flexWrap:'wrap' }}>
         {['all','job_advert','interview','offer','rejection','irrelevant'].map(f => (
-          <button key={f}
-            onClick={() => setFilter(f)}
+          <button key={f} onClick={() => setFilter(f)}
             style={{ padding:'6px 14px', borderRadius:'20px', border:'none',
               cursor:'pointer', fontSize:'13px', fontWeight:'500',
               background: filter===f ? '#2563eb' : '#334155',
@@ -77,7 +78,9 @@ export default function Emails() {
       ) : emails.length === 0 ? (
         <div className="card" style={{ textAlign:'center', padding:'48px' }}>
           <div style={{ fontSize:'48px', marginBottom:'16px' }}>📭</div>
-          <p style={{ color:'#64748b' }}>No emails found. Try scanning your Gmail.</p>
+          <p style={{ color:'#64748b' }}>
+            No emails found. Try scanning your Gmail.
+          </p>
         </div>
       ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -106,10 +109,12 @@ export default function Emails() {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontWeight:'600', color:'#f1f5f9', marginBottom:'4px' }}>
+                    <div style={{ fontWeight:'600', color:'#f1f5f9',
+                      marginBottom:'4px' }}>
                       {email.subject || 'No subject'}
                     </div>
-                    <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'6px' }}>
+                    <div style={{ fontSize:'13px', color:'#64748b',
+                      marginBottom:'6px' }}>
                       From: {email.sender}
                     </div>
                     {email.company && (
@@ -120,7 +125,8 @@ export default function Emails() {
                       </div>
                     )}
                     {email.deadline && (
-                      <div style={{ fontSize:'13px', color:'#fbbf24', marginTop:'4px' }}>
+                      <div style={{ fontSize:'13px', color:'#fbbf24',
+                        marginTop:'4px' }}>
                         ⏰ Deadline: {email.deadline}
                       </div>
                     )}
